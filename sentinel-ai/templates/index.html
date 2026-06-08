@@ -1,40 +1,163 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Sentinel AI</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentinel AI — Patrullaje Inteligente</title>
 
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;600;800&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../static/css/styles.css" />
 </head>
 <body>
-    <div class="app">
-        <aside class="sidebar">
-            <h1>Sentinel AI</h1>
-            <p>Optimización de rutas de patrullaje</p>
 
-            <label>Hora del patrullaje</label>
-            <input type="time" id="hour" value="18:30">
+  <!-- ══════════════ HEADER ══════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-mark">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polygon points="20,2 38,12 38,28 20,38 2,28 2,12" stroke="#00ff88" stroke-width="1.5" fill="none"/>
+          <polygon points="20,8 32,15 32,25 20,32 8,25 8,15" stroke="#00ff88" stroke-width="1" fill="none" opacity="0.4"/>
+          <circle cx="20" cy="20" r="4" fill="#00ff88"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-main">SENTINEL AI</span>
+        <span class="logo-sub">SISTEMA DE PATRULLAJE // SANTA CRUZ, BO</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot"></div>
+      <span class="status-label">SISTEMA ACTIVO</span>
+      <span class="clock" id="clock">--:--:--</span>
+    </div>
+  </header>
 
-            <button id="calculateBtn">Calcular ruta</button>
-            <button id="resetBtn">Reiniciar puntos</button>
+  <!-- ══════════════ MAIN LAYOUT ══════════════ -->
+  <main class="workspace">
 
-            <div class="results">
-                <h2>Resultados</h2>
-                <p><strong>Distancia:</strong> <span id="distance">-</span> km</p>
-                <p><strong>Tiempo:</strong> <span id="time">-</span> min</p>
-                <p><strong>Combustible:</strong> <span id="fuel">-</span> L</p>
-                <p><strong>Tráfico:</strong> <span id="traffic">-</span></p>
-                <p><strong>Patrulla:</strong> <span id="patrol">-</span></p>
+    <!-- ── PANEL IZQUIERDO / CONTROLES ── -->
+    <aside class="sidebar">
+
+      <section class="panel">
+        <div class="panel-header">
+          <span class="panel-tag">01</span>
+          <h2>CONFIGURAR RUTA</h2>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">MODO DE SELECCIÓN</label>
+          <div class="mode-btns">
+            <button class="mode-btn active" id="btnA" onclick="setMode('A')">
+              <span class="point-badge a">A</span> Origen
+            </button>
+            <button class="mode-btn" id="btnB" onclick="setMode('B')">
+              <span class="point-badge b">B</span> Destino
+            </button>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">PUNTO ORIGEN (A)</label>
+          <div class="coord-display" id="coordA">— Clic en el mapa —</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">PUNTO DESTINO (B)</label>
+          <div class="coord-display" id="coordB">— Clic en el mapa —</div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">HORA DE PATRULLAJE</label>
+          <input type="time" class="time-input" id="timeInput" value="08:00" />
+        </div>
+
+        <button class="calc-btn" id="calcBtn" onclick="calcularRuta()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M13 6l6 6-6 6"/>
+          </svg>
+          CALCULAR RUTA
+        </button>
+
+        <button class="clear-btn" onclick="limpiarMapa()">↺ LIMPIAR MAPA</button>
+      </section>
+
+      <!-- ── RESULTADOS ── -->
+      <section class="panel results-panel" id="resultsPanel">
+        <div class="panel-header">
+          <span class="panel-tag">02</span>
+          <h2>RESULTADOS</h2>
+        </div>
+
+        <div class="loading-bar" id="loadingBar">
+          <div class="loading-fill"></div>
+        </div>
+
+        <div class="metrics" id="metrics">
+          <div class="metric">
+            <span class="metric-icon">📍</span>
+            <div>
+              <div class="metric-label">DISTANCIA</div>
+              <div class="metric-value" id="metricDist">—</div>
             </div>
+          </div>
+          <div class="metric">
+            <span class="metric-icon">⏱</span>
+            <div>
+              <div class="metric-label">TIEMPO EST.</div>
+              <div class="metric-value" id="metricTime">—</div>
+            </div>
+          </div>
+          <div class="metric">
+            <span class="metric-icon">⛽</span>
+            <div>
+              <div class="metric-label">COMBUSTIBLE</div>
+              <div class="metric-value" id="metricFuel">—</div>
+            </div>
+          </div>
+          <div class="metric">
+            <span class="metric-icon">🚦</span>
+            <div>
+              <div class="metric-label">TRÁFICO</div>
+              <div class="metric-value" id="metricTraffic">—</div>
+            </div>
+          </div>
+          <div class="metric metric-full">
+            <span class="metric-icon">🚔</span>
+            <div>
+              <div class="metric-label">PATRULLA ASIGNADA</div>
+              <div class="metric-value accent" id="metricPatrol">—</div>
+            </div>
+          </div>
+        </div>
 
-            <small>Haz clic en el mapa para elegir punto A y punto B.</small>
-        </aside>
+        <div class="no-results" id="noResults">
+          <p>Selecciona dos puntos<br/>y calcula la ruta</p>
+        </div>
+      </section>
 
-        <main id="map"></main>
+    </aside>
+
+    <!-- ── MAPA ── -->
+    <div class="map-container">
+      <div id="map"></div>
+      <div class="map-overlay-hint" id="mapHint">
+        <span>Haz clic en el mapa para seleccionar <strong id="hintTarget">Punto A</strong></span>
+      </div>
+      <div class="map-legend">
+        <div class="legend-item"><span class="legend-dot a"></span> Origen</div>
+        <div class="legend-item"><span class="legend-dot b"></span> Destino</div>
+        <div class="legend-item"><span class="legend-line"></span> Ruta</div>
+      </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+  </main>
+
+  <script src="../static/js/map.js"></script>
 </body>
 </html>
