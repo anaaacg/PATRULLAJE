@@ -1,6 +1,5 @@
-patrol_id,patrol_name,load,status,base_zone
-1,Patrulla 1,3,available,Norte
-2,Patrulla 2,1,available,Centro
-3,Patrulla 3,2,available,Sur
-4,Patrulla 4,4,available,Este...
->>>>>>> origin/main
+patrol,load
+Patrulla 1,3
+Patrulla 2,1
+Patrulla 3,2
+Patrulla 4,4
