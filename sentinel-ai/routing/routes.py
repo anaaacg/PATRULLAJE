@@ -73,7 +73,10 @@ def get_traffic_factor(hour=None):
     if hour is None:
         current_hour = datetime.now().hour
     else:
-        current_hour = int(hour)
+        if isinstance(hour, str) and ":" in hour:
+            current_hour = int(hour.split(":")[0])
+        else:
+            current_hour = int(hour)
 
     if 7 <= current_hour < 9:
         return {
