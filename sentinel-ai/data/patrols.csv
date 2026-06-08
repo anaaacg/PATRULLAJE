@@ -1,1 +1,6 @@
-...
+patrol_id,name,current_lat,current_lon,status,fuel_liters
+P001,Patrulla Norte,-17.755500,-63.180000,available,35
+P002,Patrulla Centro,-17.783300,-63.182100,available,28
+P003,Patrulla Sur,-17.820000,-63.170000,busy,22
+P004,Patrulla Este,-17.775000,-63.145000,available,40
+P005,Patrulla Oeste,-17.790000,-63.220000,available,30

@@ -1,1 +1,6 @@
-...
+zone_id,zone_name,center_lat,center_lon,traffic_level,base_factor
+Z001,Centro,-17.783300,-63.182100,medio,1.3
+Z002,Equipetrol,-17.759000,-63.199000,alto,1.5
+Z003,Plan 3000,-17.825000,-63.140000,medio,1.3
+Z004,Mutualista,-17.755000,-63.170000,bajo,1.0
+Z005,Doble Via La Guardia,-17.800000,-63.230000,alto,1.6
