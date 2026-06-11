@@ -2,7 +2,7 @@
 Sistema Inteligente de Optimización para la Asignación de Patrullas
 
 ## Descripción
-Sentinel AI es un sistema desarrollado para la materia de Optimización de la Universidad Católica Boliviana.
+Sentinel es un sistema desarrollado para la materia de Optimización de la Universidad Católica Boliviana.
 El sistema permite seleccionar una ruta de patrullaje y asignar una patrulla disponible utilizando técnicas de Programación Entera Binaria, Pyomo y el solver GLPK.
 La aplicación utiliza información geográfica real proveniente de OpenStreetMap para generar rutas sobre la red vial de la ciudad de Santa Cruz.
 
