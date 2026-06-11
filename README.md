@@ -1,4 +1,5 @@
-# Sentinel AI - Sistema Inteligente de Optimización para la Asignación de Patrullas
+# Sentinel
+Sistema Inteligente de Optimización para la Asignación de Patrullas
 
 ## Descripción
 Sentinel AI es un sistema desarrollado para la materia de Optimización de la Universidad Católica Boliviana.
