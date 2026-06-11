@@ -1,1 +1,6 @@
-...
+flask
+pandas
+pyomo
+osmnx
+networkx
+scikit-learn

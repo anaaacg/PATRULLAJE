@@ -45,9 +45,7 @@ def assign_patrol(distance_km, traffic_factor):
 
     model.x = pyo.Var(model.P, domain=pyo.Binary)
 
-  
     # Función objetivo
-
     def objective_rule(model):
         return sum(
             (

@@ -1,1 +1,120 @@
-.....
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sentinel AI — Optimización de Patrullaje</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+</head>
+<body>
+
+  <main class="workspace">
+
+    <aside class="sidebar">
+
+      <header class="app-header">
+        <h1>Sentinel AI</h1>
+        <p>Sistema de optimización de rutas de patrullaje</p>
+      </header>
+
+      <section class="panel">
+        <h2>Configuración de ruta</h2>
+
+        <label>Modo de selección</label>
+        <div class="mode-btns">
+          <button class="mode-btn active" id="btnA" onclick="setMode('A')">
+            Origen
+          </button>
+          <button class="mode-btn" id="btnB" onclick="setMode('B')">
+            Destino
+          </button>
+        </div>
+
+        <label>Punto origen</label>
+        <div class="coord-display" id="coordA">Seleccione en el mapa</div>
+
+        <label>Punto destino</label>
+        <div class="coord-display" id="coordB">Seleccione en el mapa</div>
+
+        <label>Hora de patrullaje</label>
+        <input type="time" class="time-input" id="timeInput" value="08:00" />
+
+        <button class="calc-btn" id="calcBtn" onclick="calcularRuta()">
+          Calcular ruta
+        </button>
+
+        <button class="clear-btn" onclick="limpiarMapa()">
+          Limpiar mapa
+        </button>
+      </section>
+
+      <section class="panel results-panel" id="resultsPanel">
+        <h2>Resultados</h2>
+
+        <div class="loading-bar" id="loadingBar">
+          <div class="loading-fill"></div>
+        </div>
+
+        <div class="metrics" id="metrics">
+          <div class="metric">
+            <span>Distancia</span>
+            <strong id="metricDist">—</strong>
+          </div>
+
+          <div class="metric">
+            <span>Tiempo estimado</span>
+            <strong id="metricTime">—</strong>
+          </div>
+
+          <div class="metric">
+            <span>Combustible</span>
+            <strong id="metricFuel">—</strong>
+          </div>
+
+          <div class="metric">
+            <span>Tráfico</span>
+            <strong id="metricTraffic">—</strong>
+          </div>
+
+          <div class="metric">
+            <span>Patrulla asignada</span>
+            <strong id="metricPatrol">—</strong>
+          </div>
+        </div>
+
+        <div class="model-info">
+          <p><strong>Modelo:</strong> Programación Entera Binaria</p>
+          <p><strong>Solver:</strong> GLPK</p>
+          <p><strong>Motor:</strong> Pyomo</p>
+        </div>
+
+        <div class="no-results" id="noResults">
+          Seleccione origen y destino para calcular una ruta.
+        </div>
+      </section>
+
+    </aside>
+
+    <section class="map-container">
+      <div id="map"></div>
+
+      <div class="map-overlay-hint" id="mapHint">
+        Seleccione <strong id="hintTarget">Punto A</strong> en el mapa
+      </div>
+
+      <div class="map-legend">
+        <div><span class="legend-dot a"></span> Origen</div>
+        <div><span class="legend-dot b"></span> Destino</div>
+        <div><span class="legend-line"></span> Ruta calculada</div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>
