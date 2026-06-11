@@ -55,7 +55,7 @@ Seleccionar únicamente una combinación ruta-patrulla:
 
 ## Estructura del Proyecto
 
-sentinel-ai/
+sentinel/
 
 ├── app.py
 
