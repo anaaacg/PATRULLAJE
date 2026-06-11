@@ -1,48 +1,37 @@
 import math
 from datetime import datetime
 
-
-
+import networkx as nx
+import osmnx as ox
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):
-    """
-    Calcula la distancia aproximada entre dos coordenadas usando la fórmula Haversine.
-    Retorna la distancia en kilómetros.
-    """
-
-    # Radio de la Tierra en kilómetros
     earth_radius = 6371
 
-    # Convertir grados a radianes
     lat1_rad = math.radians(lat1)
     lon1_rad = math.radians(lon1)
     lat2_rad = math.radians(lat2)
     lon2_rad = math.radians(lon2)
 
-    # Diferencias
     dlat = lat2_rad - lat1_rad
     dlon = lon2_rad - lon1_rad
 
-    # Fórmula Haversine
     a = (
         math.sin(dlat / 2) ** 2
-        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+        + math.cos(lat1_rad)
+        * math.cos(lat2_rad)
+        * math.sin(dlon / 2) ** 2
     )
 
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    distance = earth_radius * c
-
-    return round(distance, 2)
+    return round(earth_radius * c, 2)
 
 
 def generate_simple_route(start_lat, start_lon, end_lat, end_lon, points=10):
     """
-    Genera una ruta simple entre punto A y punto B.
-    Retorna una lista de coordenadas intermedias.
+    Ruta de respaldo en línea recta si OSMnx falla.
     """
-
     route = []
 
     for i in range(points + 1):
@@ -59,17 +48,72 @@ def generate_simple_route(start_lat, start_lon, end_lat, end_lon, points=10):
     return route
 
 
-def get_traffic_factor(hour=None):
+def generate_street_route(start_lat, start_lon, end_lat, end_lon):
     """
-    Calcula el factor de tráfico simulado según la hora.
-    
-    Horarios:
-    07:00 - 09:00 -> alto, factor 1.6
-    12:00 - 14:00 -> medio, factor 1.3
-    18:00 - 20:00 -> alto, factor 1.5
-    Otro horario -> bajo, factor 1.0
+    Genera una ruta real por calles usando OpenStreetMap.
+    Descarga solo un área pequeña alrededor de los puntos para que sea más rápido.
     """
+    center_lat = (start_lat + end_lat) / 2
+    center_lon = (start_lon + end_lon) / 2
 
+    straight_distance_km = haversine_distance(
+        start_lat,
+        start_lon,
+        end_lat,
+        end_lon
+    )
+
+    dist_meters = max(2000, int(straight_distance_km * 1000 * 1.8))
+
+    graph = ox.graph_from_point(
+        (center_lat, center_lon),
+        dist=dist_meters,
+        network_type="drive",
+        simplify=True
+    )
+
+    origin_node = ox.distance.nearest_nodes(
+        graph,
+        X=start_lon,
+        Y=start_lat
+    )
+
+    destination_node = ox.distance.nearest_nodes(
+        graph,
+        X=end_lon,
+        Y=end_lat
+    )
+
+    route_nodes = nx.shortest_path(
+        graph,
+        origin_node,
+        destination_node,
+        weight="length"
+    )
+
+    route = []
+
+    for node in route_nodes:
+        route.append({
+            "lat": round(graph.nodes[node]["y"], 6),
+            "lon": round(graph.nodes[node]["x"], 6)
+        })
+
+    distance_meters = 0
+
+    for u, v in zip(route_nodes[:-1], route_nodes[1:]):
+        edge_data = graph.get_edge_data(u, v)
+
+        if edge_data:
+            first_edge = list(edge_data.values())[0]
+            distance_meters += first_edge.get("length", 0)
+
+    distance_km = round(distance_meters / 1000, 2)
+
+    return route, distance_km
+
+
+def get_traffic_factor(hour=None):
     if hour is None:
         current_hour = datetime.now().hour
     else:
@@ -104,51 +148,57 @@ def get_traffic_factor(hour=None):
 
 
 def estimate_time(distance_km, average_speed=35, traffic_factor=1.0):
-    """
-    Calcula el tiempo estimado de viaje.
-    
-    Fórmula:
-    tiempo = distancia / velocidad_promedio
-
-    El resultado se ajusta con el factor de tráfico.
-    Retorna el tiempo en minutos.
-    """
-
     if average_speed <= 0:
         raise ValueError("La velocidad promedio debe ser mayor a 0.")
 
     time_hours = distance_km / average_speed
     time_minutes = time_hours * 60
-
     adjusted_time = time_minutes * traffic_factor
 
     return round(adjusted_time, 2)
 
 
 def estimate_fuel(distance_km, fuel_per_km=0.10):
-    """
-    Calcula el combustible estimado.
-    
-    Se asume:
-    0.10 litros por kilómetro
-    equivalente a 10 litros cada 100 km.
-    """
-
     fuel = distance_km * fuel_per_km
-
     return round(fuel, 2)
 
 
 def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
     """
-    Función principal para usar desde Flask.
-    Recibe punto A y punto B.
-    Retorna distancia, tiempo, combustible, tráfico y ruta.
+    Función principal para Flask.
+    Primero intenta calcular por calles reales.
+    Si falla, usa línea recta para no romper la demo.
     """
-
-    distance = haversine_distance(start_lat, start_lon, end_lat, end_lon)
-
     traffic = get_traffic_factor(hour)
+
+    try:
+        route, distance = generate_street_route(
+            start_lat=start_lat,
+            start_lon=start_lon,
+            end_lat=end_lat,
+            end_lon=end_lon
+        )
+
+        route_type = "street"
+
+    except Exception as error:
+        print("Error usando OSMnx. Se usará ruta simple:", error)
+
+        distance = haversine_distance(
+            start_lat,
+            start_lon,
+            end_lat,
+            end_lon
+        )
+
+        route = generate_simple_route(
+            start_lat=start_lat,
+            start_lon=start_lon,
+            end_lat=end_lat,
+            end_lon=end_lon
+        )
+
+        route_type = "simple"
 
     estimated_time = estimate_time(
         distance_km=distance,
@@ -157,13 +207,6 @@ def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
     )
 
     estimated_fuel = estimate_fuel(distance)
-
-    route = generate_simple_route(
-        start_lat=start_lat,
-        start_lon=start_lon,
-        end_lat=end_lat,
-        end_lon=end_lon
-    )
 
     return {
         "start": {
@@ -179,26 +222,18 @@ def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
         "estimated_fuel_liters": estimated_fuel,
         "traffic_level": traffic["level"],
         "traffic_factor": traffic["factor"],
-        "route": route
+        "route": route,
+        "route_type": route_type
     }
 
 
-
 if __name__ == "__main__":
-    # Coordenadas de ejemplo dentro de Santa Cruz de la Sierra
-    start_lat = -17.7833
-    start_lon = -63.1821
-
-    end_lat = -17.7540
-    end_lon = -63.1990
-
     result = calculate_route_summary(
-        start_lat=start_lat,
-        start_lon=start_lon,
-        end_lat=end_lat,
-        end_lon=end_lon,
-        hour=8
+        start_lat=-17.7833,
+        start_lon=-63.1821,
+        end_lat=-17.7540,
+        end_lon=-63.1990,
+        hour="08:00"
     )
 
-    print("Resumen de ruta:")
     print(result)
