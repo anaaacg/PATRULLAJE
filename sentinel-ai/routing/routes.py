@@ -1,5 +1,6 @@
 import math
 from datetime import datetime
+from itertools import islice
 
 import networkx as nx
 import osmnx as ox
@@ -18,9 +19,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     a = (
         math.sin(dlat / 2) ** 2
-        + math.cos(lat1_rad)
-        * math.cos(lat2_rad)
-        * math.sin(dlon / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
     )
 
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
@@ -28,10 +27,36 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return round(earth_radius * c, 2)
 
 
+def get_traffic_factor(hour=None):
+    if hour is None:
+        current_hour = datetime.now().hour
+    else:
+        if isinstance(hour, str) and ":" in hour:
+            current_hour = int(hour.split(":")[0])
+        else:
+            current_hour = int(hour)
+
+    if 7 <= current_hour < 9:
+        return {"level": "alto", "factor": 1.6}
+    elif 12 <= current_hour < 14:
+        return {"level": "medio", "factor": 1.3}
+    elif 18 <= current_hour < 20:
+        return {"level": "alto", "factor": 1.5}
+    else:
+        return {"level": "bajo", "factor": 1.0}
+
+
+def estimate_time(distance_km, average_speed=35, traffic_factor=1.0):
+    time_hours = distance_km / average_speed
+    time_minutes = time_hours * 60
+    return round(time_minutes * traffic_factor, 2)
+
+
+def estimate_fuel(distance_km, fuel_per_km=0.10):
+    return round(distance_km * fuel_per_km, 2)
+
+
 def generate_simple_route(start_lat, start_lon, end_lat, end_lon, points=10):
-    """
-    Ruta de respaldo en línea recta si OSMnx falla.
-    """
     route = []
 
     for i in range(points + 1):
@@ -48,11 +73,59 @@ def generate_simple_route(start_lat, start_lon, end_lat, end_lon, points=10):
     return route
 
 
-def generate_street_route(start_lat, start_lon, end_lat, end_lon):
+def graph_to_simple_digraph(graph):
     """
-    Genera una ruta real por calles usando OpenStreetMap.
-    Descarga solo un área pequeña alrededor de los puntos para que sea más rápido.
+    Convierte el grafo de OSMnx a un DiGraph simple.
+    Esto permite usar k-shortest paths con NetworkX.
     """
+    simple_graph = nx.DiGraph()
+
+    for node, data in graph.nodes(data=True):
+        simple_graph.add_node(node, **data)
+
+    for u, v, data in graph.edges(data=True):
+        length = data.get("length", 1)
+
+        if simple_graph.has_edge(u, v):
+            if length < simple_graph[u][v].get("length", float("inf")):
+                simple_graph[u][v]["length"] = length
+        else:
+            simple_graph.add_edge(u, v, length=length)
+
+    return simple_graph
+
+
+def path_to_coordinates(graph, path):
+    route = []
+
+    for node in path:
+        route.append({
+            "lat": round(graph.nodes[node]["y"], 6),
+            "lon": round(graph.nodes[node]["x"], 6)
+        })
+
+    return route
+
+
+def calculate_path_distance(graph, path):
+    distance_meters = 0
+
+    for u, v in zip(path[:-1], path[1:]):
+        edge_data = graph.get_edge_data(u, v)
+
+        if edge_data:
+            distance_meters += edge_data.get("length", 0)
+
+    return round(distance_meters / 1000, 2)
+
+
+def generate_candidate_routes(start_lat, start_lon, end_lat, end_lon, hour=None, max_routes=3):
+    """
+    Genera varias rutas candidatas reales usando OSMnx + NetworkX.
+    Luego el solver elige cuál ruta conviene usar.
+    """
+    traffic = get_traffic_factor(hour)
+
     center_lat = (start_lat + end_lat) / 2
     center_lon = (start_lon + end_lon) / 2
 
@@ -84,129 +157,119 @@ def generate_street_route(start_lat, start_lon, end_lat, end_lon):
         Y=end_lat
     )
 
-    route_nodes = nx.shortest_path(
-        graph,
-        origin_node,
-        destination_node,
-        weight="length"
-    )
+    simple_graph = graph_to_simple_digraph(graph)
 
-    route = []
+    paths = list(islice(
+        nx.shortest_simple_paths(
+            simple_graph,
+            origin_node,
+            destination_node,
+            weight="length"
+        ),
+        max_routes
+    ))
 
-    for node in route_nodes:
-        route.append({
-            "lat": round(graph.nodes[node]["y"], 6),
-            "lon": round(graph.nodes[node]["x"], 6)
+    route_names = [
+        "Ruta 1 - Menor distancia",
+        "Ruta 2 - Alternativa vial",
+        "Ruta 3 - Alternativa secundaria"
+    ]
+
+    candidates = []
+
+    for index, path in enumerate(paths):
+        distance = calculate_path_distance(simple_graph, path)
+        time_min = estimate_time(
+            distance_km=distance,
+            average_speed=35,
+            traffic_factor=traffic["factor"]
+        )
+        fuel_liters = estimate_fuel(distance)
+
+        candidates.append({
+            "route_id": index,
+            "route_name": route_names[index] if index < len(route_names) else f"Ruta {index + 1}",
+            "route": path_to_coordinates(simple_graph, path),
+            "distance_km": distance,
+            "estimated_time_minutes": time_min,
+            "estimated_fuel_liters": fuel_liters,
+            "traffic_level": traffic["level"],
+            "traffic_factor": traffic["factor"],
+            "route_type": "street"
         })
 
-    distance_meters = 0
-
-    for u, v in zip(route_nodes[:-1], route_nodes[1:]):
-        edge_data = graph.get_edge_data(u, v)
-
-        if edge_data:
-            first_edge = list(edge_data.values())[0]
-            distance_meters += first_edge.get("length", 0)
-
-    distance_km = round(distance_meters / 1000, 2)
-
-    return route, distance_km
+    return candidates
 
 
-def get_traffic_factor(hour=None):
-    if hour is None:
-        current_hour = datetime.now().hour
-    else:
-        if isinstance(hour, str) and ":" in hour:
-            current_hour = int(hour.split(":")[0])
-        else:
-            current_hour = int(hour)
-
-    if 7 <= current_hour < 9:
-        return {
-            "level": "alto",
-            "factor": 1.6
-        }
-
-    elif 12 <= current_hour < 14:
-        return {
-            "level": "medio",
-            "factor": 1.3
-        }
-
-    elif 18 <= current_hour < 20:
-        return {
-            "level": "alto",
-            "factor": 1.5
-        }
-
-    else:
-        return {
-            "level": "bajo",
-            "factor": 1.0
-        }
-
-
-def estimate_time(distance_km, average_speed=35, traffic_factor=1.0):
-    if average_speed <= 0:
-        raise ValueError("La velocidad promedio debe ser mayor a 0.")
-
-    time_hours = distance_km / average_speed
-    time_minutes = time_hours * 60
-    adjusted_time = time_minutes * traffic_factor
-
-    return round(adjusted_time, 2)
-
-
-def estimate_fuel(distance_km, fuel_per_km=0.10):
-    fuel = distance_km * fuel_per_km
-    return round(fuel, 2)
-
-
-def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
+def generate_fallback_candidates(start_lat, start_lon, end_lat, end_lon, hour=None):
     """
-    Función principal para Flask.
-    Primero intenta calcular por calles reales.
-    Si falla, usa línea recta para no romper la demo.
+    Si OSMnx falla, genera una ruta simple para no romper la demo.
     """
     traffic = get_traffic_factor(hour)
 
-    try:
-        route, distance = generate_street_route(
-            start_lat=start_lat,
-            start_lon=start_lon,
-            end_lat=end_lat,
-            end_lon=end_lon
-        )
+    distance = haversine_distance(
+        start_lat,
+        start_lon,
+        end_lat,
+        end_lon
+    )
 
-        route_type = "street"
+    route = generate_simple_route(
+        start_lat=start_lat,
+        start_lon=start_lon,
+        end_lat=end_lat,
+        end_lon=end_lon
+    )
 
-    except Exception as error:
-        print("Error usando OSMnx. Se usará ruta simple:", error)
-
-        distance = haversine_distance(
-            start_lat,
-            start_lon,
-            end_lat,
-            end_lon
-        )
-
-        route = generate_simple_route(
-            start_lat=start_lat,
-            start_lon=start_lon,
-            end_lat=end_lat,
-            end_lon=end_lon
-        )
-
-        route_type = "simple"
-
-    estimated_time = estimate_time(
+    time_min = estimate_time(
         distance_km=distance,
         average_speed=35,
         traffic_factor=traffic["factor"]
     )
 
-    estimated_fuel = estimate_fuel(distance)
+    fuel_liters = estimate_fuel(distance)
+
+    return [
+        {
+            "route_id": 0,
+            "route_name": "Ruta simple de respaldo",
+            "route": route,
+            "distance_km": distance,
+            "estimated_time_minutes": time_min,
+            "estimated_fuel_liters": fuel_liters,
+            "traffic_level": traffic["level"],
+            "traffic_factor": traffic["factor"],
+            "route_type": "simple"
+        }
+    ]
+
+
+def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
+    """
+    Función principal para Flask.
+
+    Ahora genera varias rutas candidatas y deja que el solver elija
+    la mejor combinación ruta-patrulla.
+    """
+    try:
+        candidates = generate_candidate_routes(
+            start_lat=start_lat,
+            start_lon=start_lon,
+            end_lat=end_lat,
+            end_lon=end_lon,
+            hour=hour,
+            max_routes=3
+        )
+    except Exception as error:
+        print("Error usando OSMnx. Se usará ruta simple:", error)
+
+        candidates = generate_fallback_candidates(
+            start_lat=start_lat,
+            start_lon=start_lon,
+            end_lat=end_lat,
+            end_lon=end_lon,
+            hour=hour
+        )
 
     return {
         "start": {
@@ -217,23 +280,5 @@ def calculate_route_summary(start_lat, start_lon, end_lat, end_lon, hour=None):
             "lat": end_lat,
             "lon": end_lon
         },
-        "distance_km": distance,
-        "estimated_time_minutes": estimated_time,
-        "estimated_fuel_liters": estimated_fuel,
-        "traffic_level": traffic["level"],
-        "traffic_factor": traffic["factor"],
-        "route": route,
-        "route_type": route_type
+        "candidate_routes": candidates
     }
-
-
-if __name__ == "__main__":
-    result = calculate_route_summary(
-        start_lat=-17.7833,
-        start_lon=-63.1821,
-        end_lat=-17.7540,
-        end_lon=-63.1990,
-        hour="08:00"
-    )
-
-    print(result)
